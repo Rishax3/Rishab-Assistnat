@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rishab's Bot</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div id="chat-container">
+        <h1>Rishab's assistance bot</h1>
+        <div id="chat-box"></div>
+        <div id="input-area">
+            <input type="text" id="user-input" placeholder="Type your message...">
+            <button id="send-btn">Send</button>
+        </div>
+    </div>
+<script>
+let conversationHistory = [];
+let typingTimeout = null;
+let isTyping = false;
+let currentBotBubble = null;
+let currentReply = "";
+let charIndex = 0;
+
+// Function to handle sending messages
+async function sendMessage() {
+    const input = document.getElementById("user-input");
+    const message = input.value.trim();
+    if (!message) return;
+
+    const chatBox = document.getElementById("chat-box");
+
+    // If bot is typing, stop typing first
+    if (isTyping) {
+        clearTimeout(typingTimeout);
+        isTyping = false;
+        charIndex = currentReply.length;
+        return; // stop typing but do NOT send new message yet
+    }
+
+    input.value = "";
+
+    // Show user message
+    const userBubble = document.createElement("div");
+    userBubble.classList.add("message", "user");
+    userBubble.textContent = message;
+    chatBox.appendChild(userBubble);
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    conversationHistory.push({ role: "user", content: message });
+
+    try {
+        // Send message & history to server
+        const response = await fetch("/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+                message: message,
+                history: conversationHistory
+            })
+        });
+
+        const data = await response.json();
+
+        // Create new bot bubble
+        currentBotBubble = document.createElement("div");
+        currentBotBubble.classList.add("message", "bot");
+        chatBox.appendChild(currentBotBubble);
+        currentReply = data.reply || "Sorry, I couldn't get a response.";
+        conversationHistory.push({ role: "bot", content: currentReply });
+        charIndex = 0;
+        isTyping = true;
+
+        // Typing effect
+        function typeWriter() {
+            if (!isTyping) return;
+            if (charIndex < currentReply.length) {
+                currentBotBubble.textContent += currentReply.charAt(charIndex);
+                charIndex++;
+                chatBox.scrollTop = chatBox.scrollHeight;
+                typingTimeout = setTimeout(typeWriter, 30);
+            } else {
+                isTyping = false;
+            }
+        }
+
+        typeWriter();
+
+    } catch (error) {
+        console.error("Error:", error);
+        const botError = document.createElement("div");
+        botError.classList.add("message", "bot");
+        botError.textContent = "Error: Unable to reach server.";
+        chatBox.appendChild(botError);
+        chatBox.scrollTop = chatBox.scrollHeight;
+        isTyping = false;
+    }
+}
+
+// Enter key sends message
+document.getElementById("user-input").addEventListener("keydown", function(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+    }
+});
+
+// Send button stops typing if typing, else sends message
+document.querySelector("button").addEventListener("click", function() {
+    if (isTyping) {
+        clearTimeout(typingTimeout);
+        isTyping = false;
+        charIndex = currentReply.length;
+    } else {
+        sendMessage();
+    }
+});
+</script>
+
+</body>
+</html>
